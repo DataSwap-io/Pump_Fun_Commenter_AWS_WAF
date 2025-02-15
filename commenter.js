@@ -1,35 +1,29 @@
-import { RequestManager } from './utils.js';
 import { x_aws_proxy_token } from "./Auth.js";
 import { comments } from "./CommentList.js";
 import { proxies } from './ProxyList.js';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { v4 as uuidv4 } from 'uuid';
 
-const requestManager = new RequestManager(proxies);
+function delay(min, max) {
+  const ms = Math.floor(Math.random() * (max - min + 1)) + min;
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function getRandomComment() {
   return comments[Math.floor(Math.random() * comments.length)];
 }
 
 export async function postComment(mintAddress) {
-  const sessionId = uuidv4();
-  
   try {
-    const proxy = requestManager.getAvailableProxy();
-    if (!proxy) {
-      await requestManager.humanizedDelay(30000, 60000); // Wait if no proxy available
-      return postComment(mintAddress); // Retry
-    }
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)]; // Kies een proxy
+    const agent = new HttpsProxyAgent(proxy); // Maak een agent aan
 
-    const agent = new HttpsProxyAgent(proxy);
     const comment_url = "https://client-proxy-server.pump.fun/comment";
     const { AuthToken, CommentToken } = await x_aws_proxy_token;
 
-    // More natural delay between 4-8 seconds with jitter
-    await requestManager.humanizedDelay(4000, 8000);
+    // Wacht een willekeurige tijd tussen 4 en 6 seconden
+    await delay(4000, 6000);
 
     const randomComment = getRandomComment();
-    const headers = requestManager.getHeaders(AuthToken, sessionId);
 
     const response = await fetch(comment_url, {
       method: "POST",
@@ -37,28 +31,31 @@ export async function postComment(mintAddress) {
         mint: mintAddress,
         text: randomComment
       }),
-      agent: agent,
+      agent: agent, // Gebruik de proxy
       headers: {
-        ...headers,
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${AuthToken}`,
-        'X-Aws-Proxy-Token': CommentToken
+        'X-Aws-Proxy-Token': CommentToken,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Origin': 'https://pump.fun',
+        'Referer': 'https://pump.fun/',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        'Cookie': `auth_token=${AuthToken}`
       }
     });
 
     if (!response.ok) {
-      if (response.status === 403) {
-        // CAPTCHA detected, increase delay and retry with different proxy
-        await requestManager.humanizedDelay(15000, 30000);
-        return postComment(mintAddress);
-      }
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
     }
 
-    return await response.json();
+    // Verwerk de response indien nodig
+    await response.json();
   } catch (error) {
-    console.error(`Error posting comment: ${error.message}`);
-    await requestManager.humanizedDelay(10000, 20000);
-    throw error;
+    throw new Error(`Failed to post comment: ${error.message}`);
   }
 }

@@ -1,0 +1,22 @@
+export const comments = [
+  "This coin is going to the moon!",
+  "Great project! Keep it up!",
+  "I'm all in!",
+  "This is a game-changer!",
+  "HODLing for life!",
+  "Undervalued gem!",
+  "Just aped in!",
+  "Buy the dip!",
+  "This community is amazing!",
+  "Insane potential!",
+  "Why isn't everyone talking about this?!",
+  "This is the next big thing!",
+  "Don't sleep on this one! ",
+  "I can feel the FOMO kicking in!",
+  "Absolute banger of a project!",
+  "Let's break ATH!",
+  "My bags are packed!",
+  "Diamond hands all the way!",
+  "New favorite coin!",
+  "LFG!!!"
+];
