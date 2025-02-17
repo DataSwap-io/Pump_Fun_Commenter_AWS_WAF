@@ -1,8 +1,9 @@
 // utils.js
 export class RequestManager {
   constructor(proxies, cooldownTime = 300000) {
-    this.proxies = new Map(proxies.map(proxy => [proxy, Date.now()]));
     this.cooldownTime = cooldownTime;
+    // Zet de proxies initieel als beschikbaar door de cooldownTime af te trekken van de huidige tijd.
+    this.proxies = new Map(proxies.map(proxy => [proxy, Date.now() - cooldownTime]));
     this.userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
