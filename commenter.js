@@ -2,6 +2,9 @@ import { x_aws_proxy_token } from "./Auth.js";
 import { comments } from "./CommentList.js";
 import { proxies } from './ProxyList.js';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import fetch from "node-fetch";
+import dns from 'dns';
+
 
 function delay(min, max) {
   const ms = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -14,13 +17,22 @@ function getRandomComment() {
 
 export async function postComment(mintAddress) {
   try {
-    const proxy = proxies[Math.floor(Math.random() * proxies.length)]; // Kies een proxy
-    const agent = new HttpsProxyAgent(proxy); // Maak een agent aan
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    console.log("[DEBUG] use proxy:", proxy); 
+    const agent = new HttpsProxyAgent({
+      host: proxy.split(':')[0],
+      port: proxy.split(':')[1],
+      protocol: 'http:',
+      rejectUnauthorized: false,
+      family: 4,
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      }
+    });
 
     const comment_url = "https://client-proxy-server.pump.fun/comment";
     const { AuthToken, CommentToken } = await x_aws_proxy_token;
 
-    // Wacht een willekeurige tijd tussen 4 en 6 seconden
     await delay(4000, 6000);
 
     const randomComment = getRandomComment();
@@ -31,7 +43,7 @@ export async function postComment(mintAddress) {
         mint: mintAddress,
         text: randomComment
       }),
-      agent: agent, // Gebruik de proxy
+      agent: agent,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${AuthToken}`,
@@ -53,7 +65,6 @@ export async function postComment(mintAddress) {
       throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
     }
 
-    // Verwerk de response indien nodig
     await response.json();
   } catch (error) {
     throw new Error(`Failed to post comment: ${error.message}`);
