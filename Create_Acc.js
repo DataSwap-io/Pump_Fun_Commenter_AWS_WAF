@@ -3,6 +3,9 @@ import { proxies } from './ProxyList.js';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { getAuthToken } from './login.js';
 import { faker } from '@faker-js/faker';
+import dns from 'dns';
+
+process.env.NODE_OPTIONS = '--dns-result-order=ipv4first';
 
 function delay(min, max) {
   const ms = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -11,8 +14,18 @@ function delay(min, max) {
 
 async function main() {
   try {
-    const proxy = proxies[Math.floor(Math.random() * proxies.length)]; // Kies een proxy
-    const agent = new HttpsProxyAgent(proxy); // Maak een agent aan
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)]; 
+    console.log("[DEBUG] Used proxy", proxy); 
+    const agent = new HttpsProxyAgent({
+      host: proxy.split(':')[0],
+      port: proxy.split(':')[1],
+      protocol: 'http:',
+      rejectUnauthorized: false,
+      family: 4,
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      }
+    });
 
     const authToken = await getAuthToken();
     await delay(5000, 10000);
@@ -36,7 +49,7 @@ async function main() {
       method: "POST",
       headers: headers,
       body: JSON.stringify(payload),
-      agent: agent // Gebruik de proxy
+      agent: agent 
     });
 
     const res = await req.json();
@@ -315,4 +328,4 @@ function genBio() {
 }
 
 
-export const Auth_Comment = main();
+export const Auth_Comment = () => main();
