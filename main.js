@@ -3,6 +3,9 @@ import { mintEmitter } from './newMintsEmitter.js';
 import { fork } from 'child_process';
 import { proxies } from './ProxyList.js';
 
+process.env.NODE_OPTIONS = '--dns-result-order=ipv4first';
+
+
 const requestManager = new RequestManager(proxies);
 let activeRequests = 0;
 const MAX_CONCURRENT = 3; // Limit concurrent requests
@@ -16,7 +19,7 @@ mintEmitter.on('newMint', async (mintedAddress) => {
   activeRequests++;
   
   try {
-    const proxy = requestManager.getAvailableProxy();
+    const proxy = await requestManager.getAvailableProxy();
     if (!proxy) {
       console.log('No proxies available, waiting...');
       await requestManager.humanizedDelay(30000, 60000);
