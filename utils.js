@@ -1,9 +1,41 @@
-// utils.js
+import { proxyValidator } from './proxyValidator.js';
+import dns from 'dns';
+
 export class RequestManager {
+  parseProxyUrl(proxyUrl) {
+    try {
+      const url = new URL(proxyUrl);
+      return {
+        host: url.hostname,
+        port: url.port,
+        auth: url.username && url.password ? `${url.username}:${url.password}` : null
+      };
+    } catch (error) {
+      console.error(`Failed to parse proxy URL: ${proxyUrl}`, error);
+      return null;
+    }
+  }
+  
+  getProxyAgent(proxyUrl) {
+    const proxyConfig = this.parseProxyUrl(proxyUrl);
+    if (!proxyConfig) return null;
+  
+    return new HttpsProxyAgent({
+      host: proxyConfig.host,
+      port: proxyConfig.port,
+      auth: proxyConfig.auth,
+      protocol: 'http:',
+      rejectUnauthorized: false,
+      family: 4,
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      }
+    });
+  }
+  
   constructor(proxies, cooldownTime = 300000) {
     this.cooldownTime = cooldownTime;
-    // Zet de proxies initieel als beschikbaar door de cooldownTime af te trekken van de huidige tijd.
-    this.proxies = new Map(proxies.map(proxy => [proxy, Date.now() - cooldownTime]));
+    this.initializeProxies(proxies);
     this.userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -15,15 +47,21 @@ export class RequestManager {
     this.sessionStore = new Map(); // Store session data
   }
 
-  getAvailableProxy() {
+  async initializeProxies(proxies) {
+    const validProxies = await proxyValidator.filterValidProxies(proxies);
+    this.proxies = new Map(validProxies.map(proxy => [proxy, Date.now() - this.cooldownTime]));
+  }
+
+  async getAvailableProxy() {
     const now = Date.now();
-    for (const [proxy, lastUsed] of this.proxies) {
-      if (now - lastUsed >= this.cooldownTime) {
-        this.proxies.set(proxy, now);
-        return proxy;
-      }
-    }
-    return null;
+    const availableProxies = Array.from(this.proxies.entries())
+      .filter(([_, lastUsed]) => now - lastUsed >= this.cooldownTime);
+    
+    if (availableProxies.length === 0) return null;
+    
+    const [proxy] = availableProxies[Math.floor(Math.random() * availableProxies.length)];
+    this.proxies.set(proxy, now);
+    return proxy;
   }
 
   getRandomUserAgent() {
