@@ -8,7 +8,9 @@ export class RequestManager {
       return {
         host: url.hostname,
         port: url.port,
-        auth: url.username && url.password ? `${url.username}:${url.password}` : null
+        auth: url.username && url.password ? `${url.username}:${url.password}` : null,
+        protocol: url.protocol || 'http:',
+        rejectUnauthorized: false
       };
     } catch (error) {
       console.error(`Failed to parse proxy URL: ${proxyUrl}`, error);
@@ -18,19 +20,24 @@ export class RequestManager {
   
   getProxyAgent(proxyUrl) {
     const proxyConfig = this.parseProxyUrl(proxyUrl);
-    if (!proxyConfig) return null;
+    if (!proxyConfig) {
+      console.error('Invalid proxy configuration');
+      return null;
+    }
   
-    return new HttpsProxyAgent({
-      host: proxyConfig.host,
-      port: proxyConfig.port,
-      auth: proxyConfig.auth,
-      protocol: 'http:',
-      rejectUnauthorized: false,
-      family: 4,
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { family: 4 }, callback);
-      }
-    });
+    try {
+      return new HttpsProxyAgent({
+        host: proxyConfig.host,
+        port: proxyConfig.port,
+        auth: proxyConfig.auth,
+        protocol: proxyConfig.protocol,
+        rejectUnauthorized: false,
+        family: 4
+      });
+    } catch (error) {
+      console.error('Failed to create proxy agent:', error);
+      return null;
+    }
   }
   
   constructor(proxies, cooldownTime = 300000) {
