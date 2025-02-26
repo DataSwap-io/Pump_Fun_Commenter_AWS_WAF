@@ -8,7 +8,7 @@ process.env.NODE_OPTIONS = '--dns-result-order=ipv4first';
 
 const requestManager = new RequestManager(proxies);
 let activeRequests = 0;
-const MAX_CONCURRENT = 3; // Limit concurrent requests
+const MAX_CONCURRENT = 3;
 
 mintEmitter.on('newMint', async (mintedAddress) => {
   if (activeRequests >= MAX_CONCURRENT) {
