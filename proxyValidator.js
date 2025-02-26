@@ -27,12 +27,13 @@ class ProxyValidator {
     if (this.checkedProxies.has(proxyUrl)) {
       return this.checkedProxies.get(proxyUrl);
     }
-
+  
     const proxyConfig = this.parseProxyString(proxyUrl);
     if (!proxyConfig) {
+      console.error('Invalid proxy configuration');
       return false;
     }
-
+  
     try {
       const agent = new HttpsProxyAgent({
         host: proxyConfig.host,
@@ -40,17 +41,19 @@ class ProxyValidator {
         auth: proxyConfig.auth,
         protocol: proxyConfig.protocol,
         rejectUnauthorized: false,
-        family: 4,
-        lookup: (hostname, options, callback) => {
-          dns.lookup(hostname, { family: 4 }, callback);
-        }
+        family: 4
       });
-
+  
       const response = await fetch('https://api.ipify.org?format=json', {
         agent,
-        timeout: 30000
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
       });
-
+  
+      console.log('Proxy validation response headers:', response.headers);
+  
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`HTTP error! Status: ${response.status}, Response: ${errorText}`);
