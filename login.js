@@ -37,22 +37,27 @@ async function POST_login(wallet) {
   const sessionId = uuidv4();
 
   try {
-    const proxy = requestManager.getAvailableProxy();
+    const proxy = await requestManager.getAvailableProxy();
     if (!proxy) {
       await requestManager.humanizedDelay(30000, 60000);
       return POST_login(wallet);
     }
 
+    const proxyConfig = requestManager.parseProxyUrl(proxy);
+    if (!proxyConfig) {
+      throw new Error('Invalid proxy configuration');
+    }
+
     const agent = new HttpsProxyAgent({
-      host: proxy.split(':')[0],
-      port: proxy.split(':')[1],
-      protocol: 'http:',
+      host: proxyConfig.host,
+      port: proxyConfig.port,
+      auth: proxyConfig.auth,
+      protocol: proxyConfig.protocol,
       rejectUnauthorized: false,
-      family: 4,
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { family: 4 }, callback);
-      }
+      family: 4
     });
+
+
     const timestamp = Date.now();
 
     const headers = {
@@ -86,6 +91,14 @@ async function POST_login(wallet) {
       body: JSON.stringify(loginData),
       agent: agent
     });
+    
+    console.log("Response headers:", response.headers);
+
+    if(response.status === 402) {
+      console.error("Proxy authentication error. Retrying with different proxy...");
+      await requestManager.humanizedDelay(5000, 10000);
+      return POST_login(wallet);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
