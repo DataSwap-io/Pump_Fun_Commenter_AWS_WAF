@@ -2,36 +2,18 @@ import { Auth_Comment } from './Create_Acc.js';
 import { proxies } from './ProxyList.js';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import dns from 'dns';
+import { RequestManager } from './utils.js';
 
-process.env.NODE_OPTIONS = '--dns-result-order=ipv4first';
+// Set DNS resolution order directly
+dns.setDefaultResultOrder('ipv4first');
 
 const TOKEN_API_URL = "https://frontend-api-v3.pump.fun/token/generateTokenForThread";
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5; // Increased from 3 to 5
 const RETRY_DELAY = 5000; 
+const requestManager = new RequestManager(proxies);
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function parseProxyUrl(proxyUrl) {
-  try {
-    const regex = /^(https?:\/\/)?(?:([^:@]+):([^@]+)@)?([^:]+):(\d+)$/;
-    const match = proxyUrl.match(regex);
-    
-    if (!match) return null;
-    
-    const [, protocol = 'http:', username, password, host, port] = match;
-    
-    return {
-      protocol: protocol.slice(0, -1),
-      host,
-      port: parseInt(port, 10),
-      auth: username && password ? `${username}:${password}` : undefined
-    };
-  } catch (error) {
-    console.error('[ERROR] Failed to parse proxy URL:', error);
-    return null;
-  }
 }
 
 async function generateToken() {
@@ -40,44 +22,66 @@ async function generateToken() {
 
   while (retryCount < MAX_RETRIES) {
     try {
-      const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-      console.log("[DEBUG] Using proxy:", proxy);
+      const proxy = await requestManager.getAvailableProxy();
+      
+      if (!proxy) {
+        console.log("[WARN] No available proxies. Waiting before retry...");
+        await delay(RETRY_DELAY * 2);
+        retryCount++;
+        continue;
+      }
+      
+      console.log(`[DEBUG] Attempt ${retryCount + 1}/${MAX_RETRIES} - Using proxy: ${proxy}`);
 
-      const proxyConfig = parseProxyUrl(proxy);
+      const proxyConfig = requestManager.parseProxyUrl(proxy);
       if (!proxyConfig) {
         throw new Error('Invalid proxy configuration');
       }
 
       const agent = new HttpsProxyAgent({
-        ...proxyConfig,
+        host: proxyConfig.host,
+        port: proxyConfig.port,
+        auth: proxyConfig.auth,
+        protocol: proxyConfig.protocol,
         rejectUnauthorized: false,
-        family: 4
+        family: 4,
+        timeout: 30000
       });
 
+      console.log("[DEBUG] Sending token generation request...");
       const response = await fetch(TOKEN_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          'User-Agent': requestManager.getRandomUserAgent(),
+          'Origin': 'https://pump.fun',
+          'Referer': 'https://pump.fun/'
         },
         agent,
-        body: JSON.stringify({
-        })
+        body: JSON.stringify({})
       });
 
-      if (response.status === 402) {
-        console.error('[ERROR] Proxy authentication failed. Retrying with different proxy...');
+      console.log(`[DEBUG] Response status: ${response.status}, statusText: ${response.statusText}`);
+      
+      // Handle proxy authentication errors
+      if (response.status === 402 || response.status === 407) {
+        console.error(`[ERROR] Proxy authentication failed (${response.status}). Retrying with different proxy...`);
         retryCount++;
         await delay(RETRY_DELAY);
         continue;
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`[ERROR] Response body: ${errorText}`);
+        throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log("[DEBUG] Successfully generated token");
+      
       const authToken = await Auth_Comment();
+      console.log("[DEBUG] Successfully retrieved auth token");
 
       return {
         AuthToken: authToken,
@@ -94,10 +98,12 @@ async function generateToken() {
         throw new Error(`Failed to generate token after ${MAX_RETRIES} attempts: ${lastError.message}`);
       }
       
-      await delay(RETRY_DELAY);
+      // Increase delay with each retry
+      await delay(RETRY_DELAY * retryCount);
     }
   }
 }
+
 export const x_aws_proxy_token = generateToken();
 
 x_aws_proxy_token.catch(error => {
